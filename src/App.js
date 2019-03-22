@@ -6,46 +6,64 @@ import { mole, Agent } from "react-molecule";
 import { observable } from "mobx";
 import { observer } from "mobx-react";
 
-class UsersLoader extends Agent {
+class RESTAgent extends Agent {
   store = observable({
-    isLoading: true,
+    loading: true,
     data: []
   });
 
   init() {
-    this.molecule.on("userSearch", value => {
-      this.loadUsers(value);
+    this.on("search,", value => {
+      this.load(value);
     });
-    console.log("init");
-    this.loadUsers();
+
+    this.load();
   }
 
-  loadUsers = (search = "") => {
-    Object.assign(this.store, {
-      isLoading: true
-    });
+  load() {
+    console.log(this.config.endpoint);
+    this.store.loading = true;
 
-    fetch(`https://jsonplaceholder.typicode.com/users?q=${search}`)
-      .then(response => response.json())
-      .then(users => {
+    fetch(this.config.endpoint) // Notice the config. Will explain later.
+      .then(response => response.json)
+      .then(data => {
+        if (this.config.single) {
+          data = data[0];
+        }
+
         Object.assign(this.store, {
-          isLoading: false,
-          data: users
+          loading: false,
+          data
         });
       });
-  };
+  }
 }
-// UserPage
 
-// Equivallent with <Molecule store={observable.map()}>...</Molecule>
-const UserPage = mole(() => {
+// Our molecule can receive props such as <UserPageMolecule userId={123} />
+// const UserPageMolecule = mole(({userId}) => {
+//   return {
+//   agents: {
+//     users: RESTAgent.factory({ endpoint: `https://feed.me/users/${userId}`, single: true }),
+//     posts: RESTAgent.factory({ endpoint: 'https://feed.me/posts' })
+//   }
+// }
+// })(UserPage);
+
+const UserPage = mole(({ userId }) => {
   return {
     agents: {
-      users: UsersLoader.factory()
+      users: RESTAgent.factory({
+        endpoint: `https://feed.me/users/${userId}`,
+        //single: true,
+        searchEvent: "userSearch"
+      }),
+      posts: RESTAgent.factory({
+        endpoint: "https://feed.me/users",
+        searchEvent: "postSearch"
+      })
     }
   };
 })(props => {
-  // Now we have access to molecule.store.get('xxx');
   const { molecule } = props;
 
   return (
@@ -56,16 +74,14 @@ const UserPage = mole(() => {
   );
 });
 
-// SearchBar
 const SearchBar = ({ molecule }) => {
-  return <input onKeyUp={e => molecule.emit("userSearch", e.target.value)} />;
+  const agent = molecule.agents.users;
+  return <input onKeyUp={e => agent.emit("search", e.target.value)} />;
 };
-
-// UserListWithData
 
 const UserListWithObserve = observer(({ molecule }) => {
   const usersAgent = molecule.agents.users;
-  const { isLoading: usersLoading, data: users } = usersAgent.store;
+  const { loading: usersLoading, data: users } = usersAgent.store;
 
   if (usersLoading) {
     return <p>Loading users ...</p>;
