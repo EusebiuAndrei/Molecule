@@ -7,25 +7,30 @@ import { observable } from "mobx";
 import { observer } from "mobx-react";
 
 class UsersLoader extends Agent {
+  store = observable({
+    isLoading: true,
+    data: []
+  });
+
   init() {
     this.molecule.on("userSearch", value => {
       this.loadUsers(value);
     });
-
+    console.log("init");
     this.loadUsers();
   }
 
   loadUsers = (search = "") => {
-    Object.assign(this.molecule.store, {
-      usersLoading: true
+    Object.assign(this.store, {
+      isLoading: true
     });
 
     fetch(`https://jsonplaceholder.typicode.com/users?q=${search}`)
       .then(response => response.json())
       .then(users => {
-        Object.assign(this.molecule.store, {
-          usersLoading: false,
-          users
+        Object.assign(this.store, {
+          isLoading: false,
+          data: users
         });
       });
   };
@@ -37,11 +42,7 @@ const UserPage = mole(() => {
   return {
     agents: {
       users: UsersLoader.factory()
-    },
-    store: observable({
-      usersLoading: true,
-      users: []
-    })
+    }
   };
 })(props => {
   // Now we have access to molecule.store.get('xxx');
@@ -63,7 +64,8 @@ const SearchBar = ({ molecule }) => {
 // UserListWithData
 
 const UserListWithObserve = observer(({ molecule }) => {
-  const { usersLoading, users } = molecule.store;
+  const usersAgent = molecule.agents.users;
+  const { isLoading: usersLoading, data: users } = usersAgent.store;
 
   if (usersLoading) {
     return <p>Loading users ...</p>;
@@ -71,8 +73,6 @@ const UserListWithObserve = observer(({ molecule }) => {
 
   return <UserList users={users} />;
 });
-// Now UserListWithData receives `currentSearch` as prop, no longer listens to any event
-// So in order to implement that kind of search you would do the load inside
 
 const UserList = ({ users }) => (
   <ul>
