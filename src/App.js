@@ -1,17 +1,47 @@
 import React, { Component, Fragment } from "react";
 import "./App.css";
 
-import { mole } from "react-molecule";
+import { mole, Agent } from "react-molecule";
 
 import { observable } from "mobx";
 import { observer } from "mobx-react";
 
+class UsersLoader extends Agent {
+  init() {
+    this.molecule.on("userSearch", value => {
+      this.loadUsers(value);
+    });
+
+    this.loadUsers();
+  }
+
+  loadUsers = (search = "") => {
+    Object.assign(this.molecule.store, {
+      usersLoading: true
+    });
+
+    fetch(`https://jsonplaceholder.typicode.com/users?q=${search}`)
+      .then(response => response.json())
+      .then(users => {
+        Object.assign(this.molecule.store, {
+          usersLoading: false,
+          users
+        });
+      });
+  };
+}
 // UserPage
 
 // Equivallent with <Molecule store={observable.map()}>...</Molecule>
 const UserPage = mole(() => {
   return {
-    store: observable.map()
+    agents: {
+      users: UsersLoader.factory()
+    },
+    store: observable({
+      usersLoading: true,
+      users: []
+    })
   };
 })(props => {
   // Now we have access to molecule.store.get('xxx');
@@ -20,56 +50,29 @@ const UserPage = mole(() => {
   return (
     <Fragment>
       <SearchBar molecule={molecule} />
-      <UserListObserver molecule={molecule} />
+      <UserListWithObserve molecule={molecule} />
     </Fragment>
   );
 });
 
 // SearchBar
 const SearchBar = ({ molecule }) => {
-  return (
-    <input onKeyUp={e => molecule.store.set("currentSearch", e.target.value)} />
-  );
+  return <input onKeyUp={e => molecule.emit("userSearch", e.target.value)} />;
 };
 
 // UserListWithData
 
-const UserListObserver = observer(({ molecule }) => {
-  return (
-    <UserListWithData currentSearch={molecule.store.get("currentSearch")} />
-  );
+const UserListWithObserve = observer(({ molecule }) => {
+  const { usersLoading, users } = molecule.store;
+
+  if (usersLoading) {
+    return <p>Loading users ...</p>;
+  }
+
+  return <UserList users={users} />;
 });
 // Now UserListWithData receives `currentSearch` as prop, no longer listens to any event
 // So in order to implement that kind of search you would do the load inside
-
-class UserListWithData extends Component {
-  state = {
-    users: [],
-    loading: true
-  };
-
-  componentDidMount = () => {
-    this.loadData();
-  };
-
-  componentDidUpdate = () => {
-    this.loadData(this.props.currentSearch);
-  };
-
-  loadData(search = "") {
-    fetch(`https://jsonplaceholder.typicode.com/users?q=${search}`)
-      .then(response => response.json())
-      .then(users => this.setState({ users }));
-  }
-
-  render() {
-    const { users } = this.state;
-
-    //if (loading) return "Please wait...";
-
-    return <UserList users={users} />;
-  }
-}
 
 const UserList = ({ users }) => (
   <ul>
