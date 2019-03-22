@@ -3,14 +3,24 @@ import "./App.css";
 
 import { mole } from "react-molecule";
 
+import { observable } from "mobx";
+import { observer } from "mobx-react";
+
 // UserPage
-const UserPage = mole()(props => {
+
+// Equivallent with <Molecule store={observable.map()}>...</Molecule>
+const UserPage = mole(() => {
+  return {
+    store: observable.map()
+  };
+})(props => {
+  // Now we have access to molecule.store.get('xxx');
   const { molecule } = props;
 
   return (
     <Fragment>
       <SearchBar molecule={molecule} />
-      <UserListWithData molecule={molecule} />
+      <UserListObserver molecule={molecule} />
     </Fragment>
   );
 });
@@ -18,43 +28,44 @@ const UserPage = mole()(props => {
 // SearchBar
 const SearchBar = ({ molecule }) => {
   return (
-    <input onKeyUp={e => molecule.emit("search", { value: e.target.value })} />
+    <input onKeyUp={e => molecule.store.set("currentSearch", e.target.value)} />
   );
 };
 
 // UserListWithData
+
+const UserListObserver = observer(({ molecule }) => {
+  return (
+    <UserListWithData currentSearch={molecule.store.get("currentSearch")} />
+  );
+});
+// Now UserListWithData receives `currentSearch` as prop, no longer listens to any event
+// So in order to implement that kind of search you would do the load inside
+
 class UserListWithData extends Component {
   state = {
     users: [],
     loading: true
   };
 
-  constructor(props) {
-    super(props);
-
-    const { molecule } = props;
-
-    // Here we listen on 'search' event dispatched by the SearchBar
-    // This event can only be listened by components within the molecule.
-    molecule.on("search", ({ value }) => {
-      this.loadData(value);
-    });
-
+  componentDidMount = () => {
     this.loadData();
-  }
+  };
+
+  componentDidUpdate = () => {
+    this.loadData(this.props.currentSearch);
+  };
 
   loadData(search = "") {
-    this.setState({ loading: true });
-
     fetch(`https://jsonplaceholder.typicode.com/users?q=${search}`)
       .then(response => response.json())
-      .then(users => this.setState({ users, loading: false }));
+      .then(users => this.setState({ users }));
   }
 
   render() {
-    const { loading, users } = this.state;
+    const { users } = this.state;
 
-    if (loading) return "Please wait...";
+    //if (loading) return "Please wait...";
 
     return <UserList users={users} />;
   }
