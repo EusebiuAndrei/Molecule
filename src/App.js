@@ -6,42 +6,70 @@ import { mole, Agent } from "react-molecule";
 import { observable } from "mobx";
 import { observer } from "mobx-react";
 
-class UsersLoader extends Agent {
+class DataLoaderAgent extends Agent {
   store = observable({
-    isLoading: true,
-    data: []
+    results: []
   });
 
   init() {
-    this.molecule.on("userSearch", value => {
-      this.loadUsers(value);
-    });
-    console.log("init");
-    this.loadUsers();
+    this.load();
   }
 
-  loadUsers = (search = "") => {
-    Object.assign(this.store, {
-      isLoading: true
-    });
+  load() {
+    console.log("load");
+    const { endpoint } = this.config;
+    let payload = { endpoint };
 
-    fetch(`https://jsonplaceholder.typicode.com/users?q=${search}`)
-      .then(response => response.json())
-      .then(users => {
-        Object.assign(this.store, {
-          isLoading: false,
-          data: users
-        });
+    // Here we emit an event that can be manipulated by it's listeners.
+    this.emit("pre_load", payload);
+
+    fetch(payload.endpoint)
+      .then(r => r.json())
+      .then(results => {
+        this.store.results = results;
       });
-  };
+  }
 }
+
+class SearchAgent extends Agent {
+  store = observable({
+    currentSearch: ""
+  });
+
+  prepare() {
+    // Note that we can pass the agent's name in SearchAgent's factory
+    // If you use consistent name, you can just rely on just 'agent' or 'loader'
+
+    // Keep in mind you're in molecule territory here
+    this.loader = this.getAgent(this.config.agent);
+
+    // We hook in here to make absolutely sure that the loader doesn't do initial loading at init()
+    this.loader.on("pre_load", payload => {
+      // we can manipulate it here every time
+      payload.endpoint = payload.endpoint + `?q=${this.store.currentSearch}`;
+    });
+  }
+
+  init() {
+    this.on("search", search => {
+      console.log("search", this.store.get("currentSearch"));
+      this.store.set("currentSearch", search);
+      // You can just trigger a search when an event gets emitted
+      this.loader.load();
+    });
+  }
+}
+
 // UserPage
 
 // Equivallent with <Molecule store={observable.map()}>...</Molecule>
 const UserPage = mole(() => {
   return {
     agents: {
-      users: UsersLoader.factory()
+      search: SearchAgent.factory({ agent: "loader" }),
+      loader: DataLoaderAgent.factory({
+        endpoint: "https://jsonplaceholder.typicode.com/users"
+      })
     }
   };
 })(props => {
@@ -58,18 +86,22 @@ const UserPage = mole(() => {
 
 // SearchBar
 const SearchBar = ({ molecule }) => {
-  return <input onKeyUp={e => molecule.emit("userSearch", e.target.value)} />;
+  return (
+    <input
+      onKeyUp={e => {
+        console.log("whaat");
+        console.log(molecule.emit("search", e.target.value));
+        molecule.emit("search", e.target.value);
+      }}
+    />
+  );
 };
 
 // UserListWithData
 
 const UserListWithObserve = observer(({ molecule }) => {
-  const usersAgent = molecule.agents.users;
-  const { isLoading: usersLoading, data: users } = usersAgent.store;
-
-  if (usersLoading) {
-    return <p>Loading users ...</p>;
-  }
+  const usersAgent = molecule.agents.loader;
+  const { results: users } = usersAgent.store;
 
   return <UserList users={users} />;
 });
