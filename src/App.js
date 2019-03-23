@@ -16,7 +16,6 @@ class DataLoaderAgent extends Agent {
   }
 
   load() {
-    console.log("load");
     const { endpoint } = this.config;
     let payload = { endpoint };
 
@@ -51,9 +50,8 @@ class SearchAgent extends Agent {
   }
 
   init() {
-    this.on("search", search => {
-      console.log("search", this.store.get("currentSearch"));
-      this.store.set("currentSearch", search);
+    this.molecule.on("search", search => {
+      this.store.currentSearch = search;
       // You can just trigger a search when an event gets emitted
       this.loader.load();
     });
@@ -89,8 +87,6 @@ const SearchBar = ({ molecule }) => {
   return (
     <input
       onKeyUp={e => {
-        console.log("whaat");
-        console.log(molecule.emit("search", e.target.value));
         molecule.emit("search", e.target.value);
       }}
     />
